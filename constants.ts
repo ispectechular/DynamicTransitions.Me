@@ -52,3 +52,22 @@ export const EDUCATION_GOAL_OPTIONS = [
     "Join the military",
     "I'm not sure yet",
 ];
+
+/**
+ * --- INSTRUCTIONS FOR GOOGLE APPS SCRIPT ---
+ * This URL enables the "Submit to Teacher" button to automatically email the PDF report.
+ *
+ * ONE-TIME SETUP (5 minutes):
+ * 1. Go to script.google.com and create a new project.
+ * 2. Replace the placeholder code in the `Code.gs` file with the Apps Script code provided in our conversation.
+ * 3. Click "Deploy" > "New deployment".
+ * 4. For "Select type", click the gear icon and choose "Web app".
+ * 5. Under "Configuration":
+ *    - Give it a description (e.g., "Survey Submitter").
+ *    - Set "Execute as" to "Me ([your email address])".
+ *    - Set "Who has access" to "Anyone". **<-- This is very important!
+ * 6. Click "Deploy".
+ * 7. Click "Authorize access" and approve the permissions for your Google Account.
+ * 8. Copy the "Web app URL" and paste it below, replacing the placeholder text.
+ */
+export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyxkJjrK1EzvcU5bgSDcJ35ewbTk2SmKg5dezpG3q6yGjGXAMl8BNlQfZK5Lq5L_qa_Ew/exec';

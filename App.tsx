@@ -48,7 +48,7 @@ const App: React.FC = () => {
     fetchQuestionBatch(initialData);
   };
 
-  const handleSubmitAnswer = (answer: string) => {
+  const handleSubmitAnswer = (answer: string | string[]) => {
     if (!surveyData || !currentQuestion) return;
 
     const newResponse: QuestionResponse = {

@@ -3,7 +3,7 @@ import type { GeneratedQuestion } from '../types';
 import { MAX_QUESTIONS, POSITIVE_MESSAGES } from '../constants';
 import LoadingSpinner from './LoadingSpinner';
 import { generateSpeech } from '../services/geminiService';
-import { SpeakerOnIcon, SpeakerOffIcon, PlayIcon, PauseIcon, SettingsIcon } from './icons';
+import { SpeakerOnIcon, SpeakerOffIcon, PlayIcon, PauseIcon, SettingsIcon, CheckCircleIcon } from './icons';
 import { decode, decodeAudioData } from '../audioUtils';
 import { AudioSettingsContext } from '../contexts/AudioSettingsContext';
 import SettingsModal from './SettingsModal';
@@ -13,35 +13,36 @@ interface SurveyScreenProps {
   question: GeneratedQuestion;
   questionNumber: number;
   isLoading: boolean;
-  onSubmitAnswer: (answer: string) => void;
+  onSubmitAnswer: (answer: string | string[]) => void;
   onGoBack: () => void;
 }
 
 const SurveyScreen: React.FC<SurveyScreenProps> = ({ question, questionNumber, isLoading, onSubmitAnswer, onGoBack }) => {
-  const [selectedAnswer, setSelectedAnswer] = useState<string>('');
+  const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
   const [writtenAnswer, setWrittenAnswer] = useState('');
   const [error, setError] = useState('');
   const [key, setKey] = useState(questionNumber);
   const [loadingMessage, setLoadingMessage] = useState(POSITIVE_MESSAGES[0]);
 
   // State and refs for Text-to-Speech
-  const [isTtsOn, setIsTtsOn] = useState(true);
+  const { settings, toggleTts } = useContext(AudioSettingsContext);
+  const isTtsOn = settings.isTtsOn;
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReadyToPlay, setIsReadyToPlay] = useState(false);
   const [isFetchingCurrentAudio, setIsFetchingCurrentAudio] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentlyReading, setCurrentlyReading] = useState<string | null>(null);
+  const [autoPlayed, setAutoPlayed] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const speechQueueRef = useRef<{ text: string; id: string }[]>([]);
   const isSpeakingRef = useRef(false);
   const audioBufferCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
-  const { settings } = useContext(AudioSettingsContext);
 
 
   useEffect(() => {
-    setSelectedAnswer('');
+    setSelectedAnswers([]);
     setWrittenAnswer('');
     setError('');
     setKey(questionNumber);
@@ -67,6 +68,19 @@ const SurveyScreen: React.FC<SurveyScreenProps> = ({ question, questionNumber, i
     setCurrentlyReading(null);
     setIsPlaying(false);
   }, []);
+  
+  const buildSpeechQueue = useCallback(() => {
+    const itemsToRead = [{ text: question.question_text, id: 'question-text' }];
+    if (question.type === 'multiple_choice' || question.type === 'multiple_select') {
+        itemsToRead.push({ text: "Answers:", id: 'answers-cue' });
+        question.options?.forEach((option, index) => {
+            itemsToRead.push({ text: option, id: `option-${index}` });
+        });
+    }
+    speechQueueRef.current = itemsToRead;
+    audioBufferCacheRef.current.clear();
+    setIsReadyToPlay(true);
+  }, [question]);
 
   const playFromQueue = useCallback(async () => {
     if (isSpeakingRef.current || speechQueueRef.current.length === 0 || !isTtsOn) {
@@ -150,7 +164,14 @@ const SurveyScreen: React.FC<SurveyScreenProps> = ({ question, questionNumber, i
   }, [isTtsOn, settings]);
 
   const handlePlayPause = useCallback(async () => {
-    if (!isTtsOn || !isReadyToPlay) return;
+    if (!isTtsOn) return;
+
+    if (speechQueueRef.current.length === 0 && !isSpeakingRef.current) {
+        buildSpeechQueue();
+        await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    if (!isReadyToPlay) return;
 
     if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -168,40 +189,106 @@ const SurveyScreen: React.FC<SurveyScreenProps> = ({ question, questionNumber, i
             playFromQueue();
         }
     }
-  }, [isTtsOn, isReadyToPlay, playFromQueue]);
+  }, [isTtsOn, isReadyToPlay, playFromQueue, buildSpeechQueue]);
 
   useEffect(() => {
     stopAllAudio();
+    setAutoPlayed(false);
+    setIsReadyToPlay(false);
     if (isTtsOn && !isLoading) {
-        setIsReadyToPlay(false);
-        const itemsToRead = [{ text: question.question_text, id: 'question-text' }];
-        if (question.type === 'multiple_choice' && question.options) {
-            question.options.forEach((option, index) => {
-                itemsToRead.push({ text: option, id: `option-${index}` });
-            });
-        }
-        speechQueueRef.current = itemsToRead;
-        audioBufferCacheRef.current.clear();
-        setIsReadyToPlay(true);
+        buildSpeechQueue();
     }
     return () => {
         stopAllAudio();
     };
-  }, [question, isTtsOn, isLoading, stopAllAudio, settings.voice]);
+  }, [question, isTtsOn, isLoading, stopAllAudio, settings.voice, buildSpeechQueue]);
+
+  useEffect(() => {
+    // Autoplay when a new question is ready, TTS is on, and it hasn't played yet.
+    if (isTtsOn && isReadyToPlay && !autoPlayed && !isLoading) {
+        handlePlayPause();
+        setAutoPlayed(true);
+    }
+  }, [isTtsOn, isReadyToPlay, autoPlayed, isLoading, handlePlayPause]);
 
 
   const handleSubmit = () => {
-    const answer = question.type === 'multiple_choice' ? selectedAnswer : writtenAnswer.trim();
-    if (!answer) {
-      setError('Please provide an answer.');
+    let answer: string | string[];
+
+    if (question.type === 'multiple_choice' || question.type === 'multiple_select') {
+        answer = selectedAnswers;
+    } else {
+        answer = writtenAnswer.trim();
+    }
+    
+    if (question.type === 'multiple_choice' && answer.length !== 1) {
+      setError('Please select one answer.');
       return;
     }
+    if ((question.type === 'multiple_select' || question.type === 'multiple_choice') && answer.length === 0) {
+        setError('Please select at least one answer.');
+        return;
+    }
+    if (question.type === 'written' && !answer) {
+        setError('Please provide an answer.');
+        return;
+    }
+
     setError('');
     stopAllAudio();
-    onSubmitAnswer(answer);
+    onSubmitAnswer(question.type === 'multiple_choice' ? answer[0] : answer);
+  };
+
+  const handleSelectOption = (option: string) => {
+    if (question.type === 'multiple_choice') {
+        setSelectedAnswers([option]);
+    } else if (question.type === 'multiple_select') {
+        setSelectedAnswers(prev => 
+            prev.includes(option) ? prev.filter(item => item !== option) : [...prev, option]
+        );
+    }
   };
   
   const progressPercentage = (questionNumber / MAX_QUESTIONS) * 100;
+
+  const renderAnswerOptions = () => {
+    if (question.type === 'written') {
+        return (
+            <textarea
+                value={writtenAnswer}
+                onChange={(e) => setWrittenAnswer(e.target.value)}
+                className="w-full p-4 border border-gray-300 rounded-lg text-lg focus:ring-[#A2C5AC] focus:border-[#A2C5AC] min-h-[120px]"
+                placeholder="Type your answer here..."
+            />
+        );
+    }
+
+    if (question.type === 'multiple_choice' || question.type === 'multiple_select') {
+        return (
+            <div className="space-y-3">
+                {question.options?.map((option, index) => {
+                    const isSelected = selectedAnswers.includes(option);
+                    return (
+                        <button
+                            id={`option-${index}`}
+                            key={index}
+                            onClick={() => handleSelectOption(option)}
+                            className={`w-full text-left p-4 border rounded-lg transition-all duration-300 text-lg flex items-center justify-between ${
+                                isSelected
+                                    ? 'border-[#A2C5AC] ring-2 ring-[#A2C5AC] bg-[#A2C5AC]/10'
+                                    : 'border-gray-300 hover:border-[#878E99] hover:bg-gray-50'
+                            } ${currentlyReading === `option-${index}` ? 'bg-[#A2C5AC]/20' : ''}`}
+                        >
+                            <span>{option}</span>
+                            {isSelected && <CheckCircleIcon className="w-6 h-6 text-[#A2C5AC]" />}
+                        </button>
+                    );
+                })}
+            </div>
+        );
+    }
+    return null;
+  };
 
   return (
     <>
@@ -229,7 +316,7 @@ const SurveyScreen: React.FC<SurveyScreenProps> = ({ question, questionNumber, i
                         </button>
                         </>
                     )}
-                    <button onClick={() => setIsTtsOn(prev => !prev)} title={isTtsOn ? 'Turn off text-to-speech' : 'Turn on text-to-speech'} className="text-gray-500 hover:text-gray-800 p-1 rounded-full hover:bg-gray-100 transition-colors">
+                    <button onClick={toggleTts} title={isTtsOn ? 'Turn off text-to-speech' : 'Turn on text-to-speech'} className="text-gray-500 hover:text-gray-800 p-1 rounded-full hover:bg-gray-100 transition-colors">
                         {isTtsOn ? <SpeakerOnIcon className="w-5 h-5" /> : <SpeakerOffIcon className="w-5 h-5" />}
                     </button>
                   </div>
@@ -249,32 +336,7 @@ const SurveyScreen: React.FC<SurveyScreenProps> = ({ question, questionNumber, i
           ) : (
             <div key={key} className="animate-[fadeIn_0.5s_ease-in-out]">
               <h2 id="question-text" className={`text-2xl sm:text-3xl font-bold text-gray-800 mb-6 p-2 rounded-md transition-colors duration-300 ${currentlyReading === 'question-text' ? 'bg-[#A2C5AC]/20' : ''}`}>{question.question_text}</h2>
-              {question.type === 'multiple_choice' && (
-                <div className="space-y-3">
-                  {question.options?.map((option, index) => (
-                    <button
-                      id={`option-${index}`}
-                      key={index}
-                      onClick={() => setSelectedAnswer(option)}
-                      className={`w-full text-left p-4 border rounded-lg transition-all duration-300 text-lg ${
-                        selectedAnswer === option
-                          ? 'border-[#A2C5AC] ring-2 ring-[#A2C5AC] bg-[#A2C5AC]/10'
-                          : 'border-gray-300 hover:border-[#878E99] hover:bg-gray-50'
-                      } ${currentlyReading === `option-${index}` ? 'bg-[#A2C5AC]/20' : ''}`}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {question.type === 'written' && (
-                <textarea
-                  value={writtenAnswer}
-                  onChange={(e) => setWrittenAnswer(e.target.value)}
-                  className="w-full p-4 border border-gray-300 rounded-lg text-lg focus:ring-[#A2C5AC] focus:border-[#A2C5AC] min-h-[120px]"
-                  placeholder="Type your answer here..."
-                ></textarea>
-              )}
+              {renderAnswerOptions()}
             </div>
           )}
         </div>

@@ -21,7 +21,8 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartSurvey }) => {
   const [error, setError] = useState('');
 
   // State and refs for Text-to-Speech
-  const [isTtsOn, setIsTtsOn] = useState(true);
+  const { settings, toggleTts } = useContext(AudioSettingsContext);
+  const isTtsOn = settings.isTtsOn;
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReadyToPlay, setIsReadyToPlay] = useState(false);
   const [isFetchingCurrentAudio, setIsFetchingCurrentAudio] = useState(false);
@@ -33,7 +34,6 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartSurvey }) => {
   const speechQueueRef = useRef<{ text: string; id: string }[]>([]);
   const isSpeakingRef = useRef(false);
   const audioBufferCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
-  const { settings } = useContext(AudioSettingsContext);
 
   useEffect(() => {
     setGoal('');
@@ -148,34 +148,8 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartSurvey }) => {
         playFromQueue();
     }
   }, [isTtsOn, settings]);
-
-  const handlePlayPause = useCallback(async () => {
-    if (!isTtsOn || !isReadyToPlay) return;
-
-    if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-        gainNodeRef.current = audioContextRef.current.createGain();
-        gainNodeRef.current.connect(audioContextRef.current.destination);
-    }
-
-    if (audioContextRef.current.state === 'running') {
-        await audioContextRef.current.suspend();
-        setIsPlaying(false);
-    } else {
-        await audioContextRef.current.resume();
-        setIsPlaying(true);
-        if (!isSpeakingRef.current && speechQueueRef.current.length > 0) {
-            playFromQueue();
-        }
-    }
-  }, [isTtsOn, isReadyToPlay, playFromQueue]);
   
-  useEffect(() => {
-    stopAllAudio();
-    if (!isTtsOn) return;
-
-    setIsReadyToPlay(false);
-
+  const buildSpeechQueue = useCallback(() => {
     const itemsToRead = [
         { id: 'app-title', text: APP_TITLE },
         { id: 'app-subtitle', text: 'AI-powered surveys for student success.' },
@@ -208,9 +182,45 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartSurvey }) => {
     speechQueueRef.current = itemsToRead;
     audioBufferCacheRef.current.clear();
     setIsReadyToPlay(true);
-    
+}, [surveyType]);
+
+  const handlePlayPause = useCallback(async () => {
+    if (!isTtsOn) return;
+
+    if (speechQueueRef.current.length === 0 && !isSpeakingRef.current) {
+        buildSpeechQueue();
+        // Wait for next tick for isReadyToPlay state from buildSpeechQueue to be effective
+        await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    if (!isReadyToPlay) return;
+
+    if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        gainNodeRef.current = audioContextRef.current.createGain();
+        gainNodeRef.current.connect(audioContextRef.current.destination);
+    }
+
+    if (audioContextRef.current.state === 'running') {
+        await audioContextRef.current.suspend();
+        setIsPlaying(false);
+    } else {
+        await audioContextRef.current.resume();
+        setIsPlaying(true);
+        if (!isSpeakingRef.current && speechQueueRef.current.length > 0) {
+            playFromQueue();
+        }
+    }
+  }, [isTtsOn, isReadyToPlay, playFromQueue, buildSpeechQueue]);
+  
+  useEffect(() => {
+    stopAllAudio();
+    setIsReadyToPlay(false);
+    if (isTtsOn) {
+      buildSpeechQueue();
+    }
     return () => stopAllAudio();
-  }, [isTtsOn, surveyType, stopAllAudio, settings.voice]);
+  }, [isTtsOn, surveyType, stopAllAudio, settings.voice, buildSpeechQueue]);
 
 
   const getIcon = (type: SurveyType) => {
@@ -295,7 +305,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartSurvey }) => {
                     </button>
                     </>
                 )}
-                <button onClick={() => setIsTtsOn(prev => !prev)} title={isTtsOn ? 'Turn off audio guide' : 'Turn on audio guide'} className="text-gray-500 hover:text-gray-800 p-2 rounded-full hover:bg-gray-100 transition-colors">
+                <button onClick={toggleTts} title={isTtsOn ? 'Turn off audio guide' : 'Turn on audio guide'} className="text-gray-500 hover:text-gray-800 p-2 rounded-full hover:bg-gray-100 transition-colors">
                     {isTtsOn ? <SpeakerOnIcon className="w-6 h-6" /> : <SpeakerOffIcon className="w-6 h-6" />}
                 </button>
             </div>

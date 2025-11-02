@@ -1,6 +1,6 @@
 export type SurveyType = "career_spin" | "education_spin" | "independent_spin";
 export type QuestionCategory = "Strengths" | "Preferences" | "Interests" | "Needs";
-export type QuestionType = "multiple_choice" | "written";
+export type QuestionType = "multiple_choice" | "written" | "multiple_select";
 
 export interface Teacher {
   name: string;
@@ -17,7 +17,7 @@ export interface StudentInfo {
 
 export interface QuestionResponse {
   question: GeneratedQuestion;
-  answer: string;
+  answer: string | string[];
 }
 
 export interface SurveyData {
