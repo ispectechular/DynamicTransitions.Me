@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import type { GeneratedQuestion } from '../types';
-import { MAX_QUESTIONS, POSITIVE_MESSAGES } from '../constants';
+import { POSITIVE_MESSAGES } from '../constants';
 import LoadingSpinner from './LoadingSpinner';
 import { generateSpeech } from '../services/geminiService';
 import { SpeakerOnIcon, SpeakerOffIcon, PlayIcon, PauseIcon, SettingsIcon, CheckCircleIcon } from './icons';
@@ -12,12 +12,13 @@ import SettingsModal from './SettingsModal';
 interface SurveyScreenProps {
   question: GeneratedQuestion;
   questionNumber: number;
+  maxQuestions: number;
   isLoading: boolean;
   onSubmitAnswer: (answer: string | string[]) => void;
   onGoBack: () => void;
 }
 
-const SurveyScreen: React.FC<SurveyScreenProps> = ({ question, questionNumber, isLoading, onSubmitAnswer, onGoBack }) => {
+const SurveyScreen: React.FC<SurveyScreenProps> = ({ question, questionNumber, maxQuestions, isLoading, onSubmitAnswer, onGoBack }) => {
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
   const [writtenAnswer, setWrittenAnswer] = useState('');
   const [error, setError] = useState('');
@@ -249,7 +250,7 @@ const SurveyScreen: React.FC<SurveyScreenProps> = ({ question, questionNumber, i
     }
   };
   
-  const progressPercentage = (questionNumber / MAX_QUESTIONS) * 100;
+  const progressPercentage = (questionNumber / maxQuestions) * 100;
 
   const renderAnswerOptions = () => {
     if (question.type === 'written') {
@@ -297,7 +298,7 @@ const SurveyScreen: React.FC<SurveyScreenProps> = ({ question, questionNumber, i
       <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-10">
         <div className="mb-8">
             <div className="flex justify-between items-center text-sm text-gray-600 mb-2">
-                <span>Question {questionNumber} of {MAX_QUESTIONS}</span>
+                <span>Question {questionNumber} of {maxQuestions}</span>
                 <div className="flex items-center gap-4">
                   <span className="font-semibold">{question.category}</span>
                   <div className="flex items-center gap-1">
@@ -356,7 +357,7 @@ const SurveyScreen: React.FC<SurveyScreenProps> = ({ question, questionNumber, i
                     disabled={isLoading}
                     className="w-full bg-[#A2C5AC] text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-[#9DB5B2] transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#A2C5AC] text-lg disabled:bg-[#A2C5AC]/50 disabled:cursor-not-allowed"
                 >
-                    {questionNumber === MAX_QUESTIONS ? 'Finish Survey' : 'Next Question'}
+                    {questionNumber === maxQuestions ? 'Finish Survey' : 'Next Question'}
                 </button>
             </div>
         </div>

@@ -23,6 +23,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const currentQuestion = questionQueue.length > 0 ? questionQueue[0] : null;
+  const maxQuestionsForCurrentSurvey = surveyData ? MAX_QUESTIONS[surveyData.student_info.survey_type] : 15;
 
   const fetchQuestionBatch = useCallback(async (currentData: SurveyData) => {
     if (isFetching) return;
@@ -66,7 +67,19 @@ const App: React.FC = () => {
     const newQueue = questionQueue.slice(1);
     setQuestionQueue(newQueue);
     
-    if (updatedData.responses.length >= MAX_QUESTIONS) {
+    // Check if the survey is complete
+    if (updatedData.responses.length >= maxQuestionsForCurrentSurvey) {
+        // PREVENTATIVE FIX: Sanitize all data before showing the summary screen
+        const finalSanitizedResponses = updatedData.responses.map(res => ({
+            ...res,
+            answer: Array.isArray(res.answer) ? res.answer.map(String) : String(res.answer),
+        }));
+        
+        setSurveyData({
+            ...updatedData,
+            responses: finalSanitizedResponses,
+        });
+
         setCurrentScreen(Screen.Summary);
     } else if (newQueue.length === 0) {
         setIsLoading(true); // Show loading while fetching the next immediate batch
@@ -92,10 +105,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // Proactively fetch more questions when the queue is running low
-    if (surveyData && questionQueue.length > 0 && questionQueue.length <= 2 && surveyData.responses.length < MAX_QUESTIONS - 2) {
+    if (surveyData && questionQueue.length > 0 && questionQueue.length <= 2 && surveyData.responses.length < maxQuestionsForCurrentSurvey - 2) {
       fetchQuestionBatch(surveyData);
     }
-  }, [questionQueue.length, surveyData, fetchQuestionBatch]);
+  }, [questionQueue.length, surveyData, fetchQuestionBatch, maxQuestionsForCurrentSurvey]);
 
 
   const handleRestart = () => {
@@ -120,6 +133,7 @@ const App: React.FC = () => {
           <SurveyScreen
             question={currentQuestion}
             questionNumber={surveyData.responses.length + 1}
+            maxQuestions={maxQuestionsForCurrentSurvey}
             isLoading={questionQueue.length === 1 && isFetching}
             onSubmitAnswer={handleSubmitAnswer}
             onGoBack={handleGoBack}
@@ -127,11 +141,15 @@ const App: React.FC = () => {
         );
       case Screen.Summary:
         if (!surveyData) return null;
+        const summaryTitle = surveyData.student_info.survey_type === 'career_and_education_spin'
+            ? 'Dynamic Career and Education Survey'
+            : 'Dynamic Independent Living Survey';
         return (
             <SummaryScreen
               studentInfo={surveyData.student_info}
               responses={surveyData.responses}
               onRestart={handleRestart}
+              title={summaryTitle}
             />
         );
       case Screen.Start:

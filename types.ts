@@ -1,4 +1,6 @@
-export type SurveyType = "career_spin" | "education_spin" | "independent_spin";
+
+
+export type SurveyType = "career_and_education_spin" | "independent_spin";
 export type QuestionCategory = "Strengths" | "Preferences" | "Interests" | "Needs";
 export type QuestionType = "multiple_choice" | "written" | "multiple_select";
 

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import type { QuestionResponse, StudentInfo, QuestionCategory } from '../types';
-import { generateSummaryTitle } from '../services/geminiService';
 import { APPS_SCRIPT_URL } from '../constants';
 import { CheckCircleIcon, DownloadIcon, SendIcon } from './icons';
+import { PDFContent, formatAnswer } from './PDFContent';
 
 declare global {
   interface Window {
@@ -11,89 +11,17 @@ declare global {
   }
 }
 
-// FIX: Defined SummaryScreenProps interface to fix a TypeScript error.
 interface SummaryScreenProps {
   studentInfo: StudentInfo;
   responses: QuestionResponse[];
   onRestart: () => void;
+  title: string;
 }
 
-const formatAnswer = (answer: string | string[]): string => {
-    return Array.isArray(answer) ? answer.join(', ') : answer;
-};
-
-// This component is now only used for the fallback PDF download.
-const PDFContent: React.FC<{ studentInfo: StudentInfo; responses: QuestionResponse[]; title: string }> = ({ studentInfo, responses, title }) => {
-    const surveyDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    
-    const groupedResponses = responses.reduce((acc, res) => {
-        const category = res.question.category;
-        if (!acc[category]) {
-          acc[category] = [];
-        }
-        acc[category].push(res);
-        return acc;
-    }, {} as Record<QuestionCategory, QuestionResponse[]>);
-    const categoryOrder: QuestionCategory[] = ["Strengths", "Preferences", "Interests", "Needs"];
-
-
-    return (
-        <div id="pdf-content-wrapper" style={{ width: '794px', padding: '60px', backgroundColor: 'white', color: 'black', fontFamily: 'Arial, sans-serif' }}>
-            <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#333', borderBottom: '2px solid #A2C5AC', paddingBottom: '10px', marginBottom: '10px' }}>{title}</h1>
-            <h2 style={{ fontSize: '20px', fontWeight: 'normal', color: '#555', marginBottom: '30px' }}>Dynamic Transitions Survey for {studentInfo.name}</h2>
-            
-            <div style={{ backgroundColor: '#f8f9fa', borderRadius: '8px', padding: '20px', marginBottom: '30px', border: '1px solid #eee' }}>
-                 <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#333', marginBottom: '15px' }}>Survey Details</h3>
-                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                     <tbody>
-                        <tr>
-                            <td style={{ padding: '8px', fontWeight: 'bold' }}>Student:</td>
-                            <td style={{ padding: '8px' }}>{studentInfo.name}</td>
-                            <td style={{ padding: '8px', fontWeight: 'bold' }}>Teacher:</td>
-                            <td style={{ padding: '8px' }}>{studentInfo.teacher.name}</td>
-                        </tr>
-                        <tr>
-                            <td style={{ padding: '8px', fontWeight: 'bold' }}>Grade:</td>
-                            <td style={{ padding: '8px' }}>{studentInfo.grade}</td>
-                            <td style={{ padding: '8px', fontWeight: 'bold' }}>Survey Date:</td>
-                            <td style={{ padding: '8px' }}>{surveyDate}</td>
-                        </tr>
-                        <tr>
-                            <td style={{ padding: '8px', fontWeight: 'bold' }}>Survey Type:</td>
-                            <td style={{ padding: '8px', textTransform: 'capitalize' }}>{studentInfo.survey_type.replace('_spin', '')}</td>
-                            <td style={{ padding: '8px', fontWeight: 'bold' }}>Stated Goal:</td>
-                            <td style={{ padding: '8px' }}>{studentInfo.goal || 'N/A'}</td>
-                        </tr>
-                     </tbody>
-                 </table>
-            </div>
-
-            <div style={{ marginTop: '30px' }}>
-                <h3 style={{ fontSize: '20px', fontWeight: 'bold', color: '#333', marginBottom: '20px' }}>Responses</h3>
-                {categoryOrder.map(category => (
-                    groupedResponses[category] && (
-                        <div key={category} style={{ marginBottom: '25px', pageBreakInside: 'avoid' }}>
-                            <h4 style={{ fontSize: '16px', fontWeight: 'bold', color: '#333', borderBottom: '1px solid #ddd', paddingBottom: '5px', marginBottom: '15px' }}>{category}</h4>
-                            {groupedResponses[category].map((res, index) => (
-                                <div key={index} style={{ marginBottom: '18px' }}>
-                                    <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#444', margin: '0 0 8px 0' }}>{res.question.question_text}</p>
-                                    <p style={{ fontSize: '16px', color: '#555', margin: '0 0 0 20px', borderLeft: '3px solid #A2C5AC', paddingLeft: '15px' }}>{formatAnswer(res.answer)}</p>
-                                </div>
-                            ))}
-                        </div>
-                    )
-                ))}
-            </div>
-        </div>
-    );
-};
-
-const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, onRestart }) => {
-  const [summaryTitle, setSummaryTitle] = useState('Survey Summary');
-  const [isTitleLoading, setIsTitleLoading] = useState(true);
+const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, onRestart, title }) => {
   const [submissionState, setSubmissionState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [errorDetails, setErrorDetails] = useState('');
-
+  
   const groupedResponses = responses.reduce((acc, res) => {
     const category = res.question.category;
     if (!acc[category]) {
@@ -105,51 +33,58 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, o
 
   const categoryOrder: QuestionCategory[] = ["Strengths", "Preferences", "Interests", "Needs"];
 
-
-  useEffect(() => {
-    const fetchTitle = async () => {
-        setIsTitleLoading(true);
-        try {
-            const title = await generateSummaryTitle({ student_info: studentInfo, responses });
-            setSummaryTitle(title);
-        } catch (e) {
-            console.error("Failed to generate summary title, using default.", e);
-            setSummaryTitle("Student Transition Plan");
-        } finally {
-            setIsTitleLoading(false);
-        }
-    };
-    fetchTitle();
-  }, [studentInfo, responses]);
-
-  const handleSubmitToTeacher = async () => {
+  const generateAndSubmitPdf = async () => {
     if (APPS_SCRIPT_URL.includes('PASTE_YOUR_DEPLOYED_APPS_SCRIPT_URL_HERE')) {
       setErrorDetails('The application is not configured for submission. Please set up the Google Apps Script URL.');
       setSubmissionState('error');
       return;
     }
-
+    
     setSubmissionState('submitting');
     setErrorDetails('');
 
     try {
+      // 1. Generate PDF on the client using the beautiful layout
+      const { jsPDF } = window.jspdf;
+      const pdfContentElement = document.getElementById('pdf-content-wrapper');
+      if (!pdfContentElement) {
+        throw new Error("PDF content element not found. Cannot generate PDF.");
+      }
+      
+      const canvas = await window.html2canvas(pdfContentElement, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const imgHeight = canvas.height * pdfWidth / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+
+      // 2. Get PDF as a base64 string
+      const pdfDataUri = pdf.output('datauristring');
+      const base64Pdf = pdfDataUri.split('base64,')[1];
+      
+      // 3. Create a filename and the payload for the script
+      const surveyDate = new Date().toLocaleDateString('en-CA');
+      const fileName = `TransitionSurvey-${studentInfo.name.replace(/\s/g, '_')}-${surveyDate}.pdf`;
+
       const payload = {
-        studentInfo,
-        responses,
-        title: summaryTitle,
+        recipient: studentInfo.teacher.email,
+        title: title,
+        studentName: studentInfo.name,
+        grade: studentInfo.grade,
+        pdfData: base64Pdf,
+        fileName: fileName,
       };
 
+      // 4. Send the payload to Google Apps Script
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'cors',
-        credentials: 'omit',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Required by Apps Script
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
         body: JSON.stringify(payload),
-        redirect: 'follow',
       });
-      
-      const result = await response.json();
 
+      const result = await response.json();
       if (result.status === 'success') {
         setSubmissionState('success');
       } else {
@@ -185,7 +120,7 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, o
             return (
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#A2C5AC] mx-auto mb-4"></div>
-                    <p className="text-lg text-gray-600">Submitting to {studentInfo.teacher.name}...</p>
+                    <p className="text-lg text-gray-600">Generating PDF & submitting to {studentInfo.teacher.name}...</p>
                 </div>
             );
         case 'success':
@@ -214,9 +149,8 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, o
                         Click below to automatically generate a PDF and email it to <strong>{studentInfo.teacher.name}</strong>.
                     </p>
                     <button
-                        onClick={handleSubmitToTeacher}
-                        disabled={isTitleLoading}
-                        className="bg-[#A2C5AC] text-gray-800 font-bold py-4 px-8 rounded-lg hover:bg-[#9DB5B2] transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#A2C5AC] text-xl inline-flex items-center gap-3 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                        onClick={generateAndSubmitPdf}
+                        className="bg-[#A2C5AC] text-gray-800 font-bold py-4 px-8 rounded-lg hover:bg-[#9DB5B2] transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#A2C5AC] text-xl inline-flex items-center gap-3"
                     >
                         <SendIcon className="w-6 h-6" />
                         Submit to Teacher
@@ -228,8 +162,9 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, o
 
   return (
     <>
+        {/* This hidden div is used for generating the PDF content */}
         <div style={{ position: 'absolute', left: '-9999px', top: 0, zIndex: -1 }}>
-            <PDFContent studentInfo={studentInfo} responses={responses} title={summaryTitle} />
+            <PDFContent studentInfo={studentInfo} responses={responses} title={title} />
         </div>
         <div className="w-full max-w-3xl mx-auto p-4 sm:p-6">
           <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-10">
@@ -240,8 +175,8 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, o
             </div>
 
             <div className="bg-gray-50 rounded-lg p-4 mb-8 text-sm">
-                <h3 className="font-semibold text-gray-800 mb-2">Generated Report Title</h3>
-                {isTitleLoading ? <div className="h-5 bg-gray-200 rounded-md w-3/4 animate-pulse"></div> : <p className="text-lg italic text-gray-700">"{summaryTitle}"</p>}
+                <h3 className="font-semibold text-gray-800">Report Title</h3>
+                <p className="text-lg italic text-gray-700">"{title}"</p>
             </div>
 
             <div className="space-y-8">

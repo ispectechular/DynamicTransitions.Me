@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import type { StudentInfo, SurveyType, Teacher } from '../types';
-import { SURVEY_TYPES, APP_TITLE, MIDDLE_SCHOOL_TEACHERS, HIGH_SCHOOL_TEACHERS, GRADE_LEVELS, EDUCATION_GOAL_OPTIONS } from '../constants';
-import { CareerIcon, EducationIcon, IndependentLivingIcon, SpeakerOnIcon, SpeakerOffIcon, PlayIcon, PauseIcon, SettingsIcon } from './icons';
+import { SURVEY_TYPES, APP_TITLE, MIDDLE_SCHOOL_TEACHERS, HIGH_SCHOOL_TEACHERS, GRADE_LEVELS } from '../constants';
+import { CareerIcon, IndependentLivingIcon, SpeakerOnIcon, SpeakerOffIcon, PlayIcon, PauseIcon, SettingsIcon } from './icons';
 import { generateSpeech } from '../services/geminiService';
 import { decode, decodeAudioData } from '../audioUtils';
 import { AudioSettingsContext } from '../contexts/AudioSettingsContext';
@@ -16,7 +16,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartSurvey }) => {
   const [grade, setGrade] = useState('');
   const [teacher, setTeacher] = useState<string>('');
   const [availableTeachers, setAvailableTeachers] = useState<Teacher[]>([]);
-  const [surveyType, setSurveyType] = useState<SurveyType>('career_spin');
+  const [surveyType, setSurveyType] = useState<SurveyType>('career_and_education_spin');
   const [goal, setGoal] = useState('');
   const [error, setError] = useState('');
 
@@ -163,20 +163,10 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartSurvey }) => {
         itemsToRead.push({ id: `survey-type-${type.value}`, text: `${type.label}. ${type.description}` });
     });
 
-    switch (surveyType) {
-      case 'career_spin':
-        itemsToRead.push({ id: 'goal-label-career', text: "What is a career goal you're thinking about?" });
-        break;
-      case 'education_spin':
-        itemsToRead.push({ id: 'goal-label-education', text: 'What is your main goal for education after high school?' });
-        EDUCATION_GOAL_OPTIONS.forEach((option, index) => {
-            itemsToRead.push({ id: `goal-option-${index}`, text: option });
-        });
-        break;
-      case 'independent_spin':
-        // No extra items
-        break;
+    if (surveyType === 'career_and_education_spin') {
+      itemsToRead.push({ id: 'goal-label-career', text: "What is a career goal you're thinking about?" });
     }
+    
     itemsToRead.push({ id: 'start-button', text: 'Start Survey' });
 
     speechQueueRef.current = itemsToRead;
@@ -225,8 +215,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartSurvey }) => {
 
   const getIcon = (type: SurveyType) => {
     switch(type) {
-      case 'career_spin': return <CareerIcon className="w-8 h-8 text-[#A2C5AC]" />;
-      case 'education_spin': return <EducationIcon className="w-8 h-8 text-[#A2C5AC]" />;
+      case 'career_and_education_spin': return <CareerIcon className="w-8 h-8 text-[#A2C5AC]" />;
       case 'independent_spin': return <IndependentLivingIcon className="w-8 h-8 text-[#A2C5AC]" />;
     }
   };
@@ -245,36 +234,17 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartSurvey }) => {
 
   const renderGoalInput = () => {
     const highlightClass = (id: string) => currentlyReading === id ? 'bg-[#A2C5AC]/20' : '';
-    switch (surveyType) {
-      case 'career_spin':
-        return (
-          <div>
-            <label id="goal-label-career" htmlFor="goal" className={`block text-sm font-medium text-gray-700 mb-1 p-1 rounded-md transition-colors duration-300 ${highlightClass('goal-label-career')}`}>
-              What is a career goal you're thinking about?
-            </label>
-            <input type="text" id="goal" value={goal} onChange={e => setGoal(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-[#A2C5AC] focus:border-[#A2C5AC]" placeholder="e.g., Working with animals" />
-          </div>
-        );
-      case 'education_spin':
-        return (
-          <div>
-            <span id="goal-label-education" className={`block text-sm font-medium text-gray-700 mb-2 p-1 rounded-md transition-colors duration-300 ${highlightClass('goal-label-education')}`}>
-              What is your main goal for education after high school?
-            </span>
-            <div className="grid grid-cols-2 gap-3">
-              {EDUCATION_GOAL_OPTIONS.map((option, index) => (
-                 <button id={`goal-option-${index}`} key={option} type="button" onClick={() => setGoal(option)} className={`text-center p-3 border rounded-lg transition-all duration-200 text-sm ${goal === option ? 'border-[#A2C5AC] ring-2 ring-[#A2C5AC] bg-[#A2C5AC]/10' : 'border-gray-300 hover:border-[#878E99]'} ${highlightClass(`goal-option-${index}`)}`}>
-                   {option}
-                 </button>
-              ))}
-            </div>
-          </div>
-        );
-      case 'independent_spin':
-        return null;
-      default:
-        return null;
+    if (surveyType === 'career_and_education_spin') {
+      return (
+        <div>
+          <label id="goal-label-career" htmlFor="goal" className={`block text-sm font-medium text-gray-700 mb-1 p-1 rounded-md transition-colors duration-300 ${highlightClass('goal-label-career')}`}>
+            What is a career goal you're thinking about?
+          </label>
+          <input type="text" id="goal" value={goal} onChange={e => setGoal(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-[#A2C5AC] focus:border-[#A2C5AC]" placeholder="e.g., Working with animals" />
+        </div>
+      );
     }
+    return null;
   };
   
   const highlightClass = (id: string) => currentlyReading === id ? 'bg-[#A2C5AC]/20' : '';
@@ -335,7 +305,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartSurvey }) => {
 
           <div>
             <span id="survey-type-label" className={`block text-sm font-medium text-gray-700 mb-2 p-1 rounded-md transition-colors duration-300 ${highlightClass('survey-type-label')}`}>Survey Type</span>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {SURVEY_TYPES.map(type => (
                 <button id={`survey-type-${type.value}`} key={type.value} type="button" onClick={() => setSurveyType(type.value)} className={`text-left p-4 border rounded-lg transition-all duration-200 ${surveyType === type.value ? 'border-[#A2C5AC] ring-2 ring-[#A2C5AC] bg-[#A2C5AC]/10' : 'border-gray-300 hover:border-[#878E99]'} ${highlightClass(`survey-type-${type.value}`)}`}>
                   <div className="flex items-center mb-2">{getIcon(type.value)} <span className="ml-3 font-semibold text-gray-800">{type.label}</span></div>
@@ -348,8 +318,8 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartSurvey }) => {
           {renderGoalInput()}
 
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-
-          <button id="start-button" type="submit" className={`w-full bg-[#A2C5AC] text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-[#9DB5B2] transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#A2C5AC] text-lg ${highlightClass('start-button')}`}>
+          
+          <button id="start-button" type="submit" className={`w-full bg-[#A2C5AC] text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-[#9DB5B2] transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#A2C5AC] text-lg mt-6 ${highlightClass('start-button')}`}>
             Start Survey
           </button>
         </form>
