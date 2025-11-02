@@ -63,10 +63,10 @@ export const PDFContent: React.FC<{ studentInfo: StudentInfo; responses: Questio
                 <h3 style={{ fontSize: '20px', fontWeight: 'bold', color: '#333', marginBottom: '20px' }}>Responses</h3>
                 {categoryOrder.map(category => (
                     groupedResponses[category] && (
-                        <div key={category} style={{ marginBottom: '25px', pageBreakInside: 'avoid' }}>
+                        <div key={category} style={{ marginBottom: '25px' }}>
                             <h4 style={{ fontSize: '16px', fontWeight: 'bold', color: '#333', borderBottom: '1px solid #ddd', paddingBottom: '5px', marginBottom: '15px' }}>{category}</h4>
                             {groupedResponses[category].map((res, index) => (
-                                <div key={index} style={{ marginBottom: '18px' }}>
+                                <div key={index} style={{ marginBottom: '18px', pageBreakInside: 'avoid' }}>
                                     <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#444', margin: '0 0 8px 0' }}>{res.question.question_text}</p>
                                     <p style={{ fontSize: '16px', color: '#555', margin: '0 0 0 20px', borderLeft: '3px solid #A2C5AC', paddingLeft: '15px' }}>{formatAnswer(res.answer)}</p>
                                 </div>

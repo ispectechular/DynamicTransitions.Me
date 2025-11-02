@@ -33,6 +33,44 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, o
 
   const categoryOrder: QuestionCategory[] = ["Strengths", "Preferences", "Interests", "Needs"];
 
+  // Helper function to generate a potentially multi-page PDF
+  const createMultiPagePdf = async () => {
+    const { jsPDF } = window.jspdf;
+    const pdfContentElement = document.getElementById('pdf-content-wrapper');
+    if (!pdfContentElement) {
+        throw new Error("PDF content element not found. Cannot generate PDF.");
+    }
+
+    const canvas = await window.html2canvas(pdfContentElement, { scale: 2, useCORS: true });
+    const imgData = canvas.toDataURL('image/jpeg', 0.9);
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    
+    // Calculate the height of the image in the PDF, maintaining aspect ratio
+    const imgProperties = pdf.getImageProperties(imgData);
+    const totalPdfHeight = (imgProperties.height * pdfWidth) / imgProperties.width;
+
+    let heightLeft = totalPdfHeight;
+    let position = 0;
+
+    // Add the first page
+    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
+    heightLeft -= pageHeight;
+
+    // Add subsequent pages if the content is taller than one page
+    while (heightLeft > 0) {
+        position -= pageHeight; // Move the image "up" on the new page to show the next part
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
+        heightLeft -= pageHeight;
+    }
+    
+    return pdf;
+  };
+
+
   const generateAndSubmitPdf = async () => {
     if (APPS_SCRIPT_URL.includes('PASTE_YOUR_DEPLOYED_APPS_SCRIPT_URL_HERE')) {
       setErrorDetails('The application is not configured for submission. Please set up the Google Apps Script URL.');
@@ -44,19 +82,8 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, o
     setErrorDetails('');
 
     try {
-      // 1. Generate PDF on the client using the beautiful layout
-      const { jsPDF } = window.jspdf;
-      const pdfContentElement = document.getElementById('pdf-content-wrapper');
-      if (!pdfContentElement) {
-        throw new Error("PDF content element not found. Cannot generate PDF.");
-      }
-      
-      const canvas = await window.html2canvas(pdfContentElement, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const imgHeight = canvas.height * pdfWidth / canvas.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+      // 1. Generate the multi-page PDF
+      const pdf = await createMultiPagePdf();
 
       // 2. Get PDF as a base64 string
       const pdfDataUri = pdf.output('datauristring');
@@ -75,21 +102,23 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, o
         fileName: fileName,
       };
 
-      // 4. Send the payload to Google Apps Script
-      const response = await fetch(APPS_SCRIPT_URL, {
+      // 4. Send the payload to Google Apps Script.
+      // Using 'no-cors' mode to bypass the CORS preflight issue with Google Apps Script.
+      // This means we cannot read the response, so we'll have to optimistically
+      // assume success if the request itself doesn't throw a network error.
+      await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
+        mode: 'no-cors', // Added to bypass CORS errors
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify(payload),
       });
 
-      const result = await response.json();
-      if (result.status === 'success') {
-        setSubmissionState('success');
-      } else {
-        throw new Error(result.message || 'The script returned an unknown error.');
-      }
+      // Since we can't read the response in 'no-cors' mode, we optimistically set success.
+      // The catch block will handle network-level failures.
+      setSubmissionState('success');
+
     } catch (error: any) {
       console.error("Error submitting survey:", error);
       setErrorDetails(`Failed to send the email. Error: ${error.message}. You can still download the PDF manually below.`);
@@ -98,20 +127,16 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, o
   };
 
   const handleManualPdfDownload = async () => {
-    const { jsPDF } = window.jspdf;
-    const pdfContentElement = document.getElementById('pdf-content-wrapper');
-    if (!pdfContentElement) return;
-
-    const canvas = await window.html2canvas(pdfContentElement, { scale: 2 });
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const imgHeight = canvas.height * pdfWidth / canvas.width;
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
-    
-    const surveyDate = new Date().toLocaleDateString('en-CA');
-    const fileName = `TransitionSurvey-${studentInfo.name.replace(/\s/g, '_')}-${surveyDate}.pdf`;
-    pdf.save(fileName);
+    try {
+        const pdf = await createMultiPagePdf();
+        const surveyDate = new Date().toLocaleDateString('en-CA');
+        const fileName = `TransitionSurvey-${studentInfo.name.replace(/\s/g, '_')}-${surveyDate}.pdf`;
+        pdf.save(fileName);
+    } catch(e: any) {
+        console.error("Error creating manual PDF:", e);
+        setErrorDetails(e.message || "An unknown error occurred while generating the PDF.");
+        setSubmissionState('error');
+    }
   };
   
   const renderSubmissionArea = () => {

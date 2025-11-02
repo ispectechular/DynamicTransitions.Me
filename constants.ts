@@ -18,13 +18,18 @@ export const SURVEY_TYPES: { value: SurveyType; label: string; description: stri
 export const GRADE_LEVELS: number[] = [6, 7, 8, 9, 10, 11, 12];
 
 export const MIDDLE_SCHOOL_TEACHERS: Teacher[] = [
-    { name: "Jessica Miller", email: "jmiller@wawasee.k12.in.us" },
-    { name: "Ben Eshbach", email: "beshbach@wawasee.k12.in.us" },
+    { name: "Jennifer Phillips", email: "jennifer.phillips@wawasee.k12.in.us" },
+    { name: "Heather Desomer", email: "hdesomer@wawasee.k12.in.us" },
+    { name: "Heather Butcher", email: "hbutcher@wawasee.k12.in.us" },
 ];
 
 export const HIGH_SCHOOL_TEACHERS: Teacher[] = [
+    { name: "Kari Baker", email: "kbaker@wawasee.k12.in.us" },
+    { name: "Jill Hackleman", email: "jill.hackleman@wawasee.k12.in.us" },
+    { name: "Wendy Ortiz", email: "wortiz@wawasee.k12.in.us" },
     { name: "Jesse Ritter", email: "jritter@wawasee.k12.in.us" },
-    { name: "Gordon Collins", email: "gcollins@wawasee.k12.in.us" },
+    { name: "David Shipley", email: "dshipley@wawasee.k12.in.us" },
+    { name: "Christy Troutman", email: "ctroutman@wawasee.k12.in.us" },
 ];
 
 export const MAX_QUESTIONS: { [key in SurveyType]: number } = {
