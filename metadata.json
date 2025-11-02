@@ -1,0 +1,5 @@
+{
+  "name": "Dynamic Transitions AI Survey",
+  "description": "An AI-powered survey assistant that generates adaptive transition assessment questions for high school students with IEPs, focusing on their strengths, preferences, interests, and needs (SPIN).",
+  "requestFramePermissions": []
+}
