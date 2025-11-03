@@ -33,40 +33,32 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ studentInfo, responses, o
 
   const categoryOrder: QuestionCategory[] = ["Strengths", "Preferences", "Interests", "Needs"];
 
-  // Helper function to generate a potentially multi-page PDF
+  // Replaced the PDF generation logic to use jspdf's .html() method.
+  // This provides better automatic page breaking that respects CSS properties
+  // like 'page-break-inside: avoid', preventing questions from being cut in half.
   const createMultiPagePdf = async () => {
     const { jsPDF } = window.jspdf;
+    // Use 'pt' (points) as units for consistency with font sizes and margins.
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
     const pdfContentElement = document.getElementById('pdf-content-wrapper');
     if (!pdfContentElement) {
         throw new Error("PDF content element not found. Cannot generate PDF.");
     }
 
-    const canvas = await window.html2canvas(pdfContentElement, { scale: 2, useCORS: true });
-    const imgData = canvas.toDataURL('image/jpeg', 0.9);
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    // The .html() method uses html2canvas internally but adds page-breaking logic.
+    await pdf.html(pdfContentElement, {
+        // We don't need the callback as .html() returns a promise we can await.
+        callback: (doc) => {},
+        margin: [40, 40, 40, 40],
+        // 'autoPaging: 'html'' is the key to enable CSS-based page breaks.
+        autoPaging: 'html',
+        // Set the width of the content in the PDF. A4 is 595.28pt wide.
+        // 595.28 - 40 (left margin) - 40 (right margin) = 515.28pt.
+        width: 515,
+        // Tell html2canvas the original width of the source element in pixels.
+        windowWidth: 794,
+    });
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    
-    // Calculate the height of the image in the PDF, maintaining aspect ratio
-    const imgProperties = pdf.getImageProperties(imgData);
-    const totalPdfHeight = (imgProperties.height * pdfWidth) / imgProperties.width;
-
-    let heightLeft = totalPdfHeight;
-    let position = 0;
-
-    // Add the first page
-    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
-    heightLeft -= pageHeight;
-
-    // Add subsequent pages if the content is taller than one page
-    while (heightLeft > 0) {
-        position -= pageHeight; // Move the image "up" on the new page to show the next part
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
-        heightLeft -= pageHeight;
-    }
-    
     return pdf;
   };
 
